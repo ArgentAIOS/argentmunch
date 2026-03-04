@@ -49,6 +49,7 @@ class CodeIndex:
     index_version: int = INDEX_VERSION
     file_hashes: dict[str, str] = field(default_factory=dict)  # file_path -> sha256
     git_head: str = ""           # HEAD commit hash at index time (for git repos)
+    file_summaries: dict[str, str] = field(default_factory=dict)  # file_path -> summary (populated by #9)
 
     def get_symbol(self, symbol_id: str) -> Optional[dict]:
         """Find a symbol by ID."""
