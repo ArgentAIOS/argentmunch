@@ -6,8 +6,12 @@ import hashlib
 import hmac
 import json
 import threading
+from datetime import datetime, timedelta, timezone
 from http.client import HTTPConnection
 
+import pytest
+
+import jcodemunch_mcp.cli as cli
 import jcodemunch_mcp.health_server as hs
 from jcodemunch_mcp.runtime_config import is_repo_allowed
 
@@ -89,15 +93,100 @@ def test_health_endpoint_requires_token_when_configured():
         body = json.loads(response.read())
         assert response.status == 401
         assert body["error"] == "Unauthorized"
+        assert body["reason"] == "missing_token"
+
+        conn = HTTPConnection("127.0.0.1", port, timeout=5)
+        conn.request("GET", "/health", headers={"Authorization": "Bearer wrong-token"})
+        response = conn.getresponse()
+        body = json.loads(response.read())
+        assert response.status == 401
+        assert body["reason"] == "invalid_token"
 
         conn = HTTPConnection("127.0.0.1", port, timeout=5)
         conn.request("GET", "/status", headers={"Authorization": "Bearer secret-token"})
         response = conn.getresponse()
         body = json.loads(response.read())
         assert response.status == 200
-        assert "stale_threshold_minutes" in body
+        assert body["threshold_config_used"]["stale_threshold_minutes"] == 60
+        assert body["indexed_repos_count"] == 0
+        assert body["total_symbols"] == 0
+        assert body["last_indexed_at"] is None
+        assert body["stale"] is False
     finally:
         server.shutdown()
+
+
+def test_health_endpoint_requires_token_by_default_without_local_dev_override():
+    server = _start_server()
+    port = server.server_address[1]
+    try:
+        conn = HTTPConnection("127.0.0.1", port, timeout=5)
+        conn.request("GET", "/health")
+        response = conn.getresponse()
+        body = json.loads(response.read())
+        assert response.status == 401
+        assert body["reason"] == "token_required"
+    finally:
+        server.shutdown()
+
+
+def test_health_endpoint_allows_localhost_when_local_dev_mode_enabled():
+    from http.server import HTTPServer
+
+    hs._storage_path = None
+    hs._health_token = None
+    hs._health_local_dev_mode = True
+    hs._webhook_secret = None
+    hs._repo_allowlist = []
+    hs._stale_threshold_minutes = 60
+    hs._deny_by_default_allowlist = False
+    hs._reindex_manager = _FakeManager()
+    server = HTTPServer(("127.0.0.1", 0), hs.HealthHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = server.server_address[1]
+
+    try:
+        conn = HTTPConnection("127.0.0.1", port, timeout=5)
+        conn.request("GET", "/health")
+        response = conn.getresponse()
+        body = json.loads(response.read())
+        assert response.status == 200
+        assert body["ok"] is True
+    finally:
+        server.shutdown()
+
+
+def test_status_staleness_threshold_computation(monkeypatch: pytest.MonkeyPatch):
+    now = datetime.now(timezone.utc)
+    old = (now - timedelta(minutes=120)).isoformat()
+    fresh = (now - timedelta(minutes=10)).isoformat()
+
+    def _fake_health_data(_storage_path=None):
+        return {
+            "ok": True,
+            "version": "0.1.0-mvp",
+            "indexed_repos_count": 2,
+            "total_symbols": 30,
+            "last_indexed_at": fresh,
+            "repos": [
+                {"repo": "local/stale", "symbol_count": 10, "file_count": 2, "indexed_at": old},
+                {"repo": "local/fresh", "symbol_count": 20, "file_count": 3, "indexed_at": fresh},
+            ],
+        }
+
+    monkeypatch.setattr(cli, "get_health_data", _fake_health_data)
+    status = cli.get_status_data(stale_threshold_minutes=60)
+    assert status["indexed_repos_count"] == 2
+    assert status["total_symbols"] == 30
+    assert status["last_indexed_at"] == fresh
+    assert status["stale"] is True
+    assert status["threshold_config_used"]["stale_threshold_minutes"] == 60
+    assert status["stale_repos_count"] == 1
+
+    status_relaxed = cli.get_status_data(stale_threshold_minutes=180)
+    assert status_relaxed["stale"] is False
+    assert status_relaxed["stale_repos_count"] == 0
 
 
 def test_webhook_rejects_invalid_signature_with_403():
