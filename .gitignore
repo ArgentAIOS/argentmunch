@@ -1,57 +1,59 @@
+# Secrets & credentials — NEVER commit these
+.env
+.env.*
+*.key
+*.pem
+*.p12
+*.pfx
+*.cert
+*.crt
+.secrets/
+secrets/
+credentials/
+
+# Index data — local only, never commit
+index-data/
+~/.code-index/
+*.sqlite
+*.sqlite3
+*.db
+
+# Temp files
+tmp/
+temp/
+.tmp/
+
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
+*.pyo
+.pytest_cache/
 *.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# Virtual environments
-venv/
-ENV/
-env/
+dist/
+build/
 .venv/
+venv/
+env/
+.Python
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
 
 # IDE
 .vscode/
 .idea/
-*.swp
-*.swo
-*~
+*.iml
 
-# Testing
-.pytest_cache/
+# Coverage
 .coverage
 htmlcov/
 .tox/
-
-# MyPy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Storage (don't commit test indexes)
-.code-index/
-
-# Claude Code local settings (may contain credentials from allowed commands)
-.claude/
-
-# Local working notes (may contain sensitive info)
-prompt.md

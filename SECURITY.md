@@ -1,100 +1,96 @@
-# Security Controls
+# Security Policy — ArgentMunch
 
-jcodemunch-mcp indexes source code from local folders and GitHub repositories. This document describes the security controls that protect against common risks when handling arbitrary codebases.
+## Supported Versions
 
----
-
-## Path Traversal Prevention
-
-All user-supplied paths are validated before any file is read or written.
-
-* **`validate_path(root, target)`** resolves both paths to absolute form and verifies the target is a descendant of `root` using `os.path.commonpath()`.
-* Applied during file discovery and again before each file read (defense in depth).
-* Paths such as `../../etc/passwd` or absolute paths outside the repository root are rejected.
+| Version | Supported |
+|---|---|
+| main (pre-release) | ✅ Active development |
+| < 1.0.0 | ⚠️ No SLA — report issues but no guarantee of fix timeline |
 
 ---
 
-## Symlink Escape Protection
+## Reporting a Vulnerability
 
-Symlinks can be used to escape the repository root and read arbitrary files.
+**Do NOT open a public GitHub issue for security vulnerabilities.**
 
-* **Default:** `follow_symlinks=False` — symlinks are skipped during file discovery.
-* When symlinks are followed (`follow_symlinks=True`), each symlink target is resolved and validated against the repository root. Escaping symlinks are skipped with a warning.
-* **`is_symlink_escape(root, path)`** checks whether a symlink resolves outside the root.
-* On Windows, environments without symlink support automatically skip symlink traversal.
+Report security issues privately:
+- **Email:** jbrashear@titaniumcomputing.com
+- **Subject line:** `[SECURITY] ArgentMunch - <brief description>`
+- **Expected response:** Within 72 hours
+- **Resolution target:** Critical issues patched within 7 days
 
----
-
-## Default Ignore Policy
-
-Files are filtered through multiple layers:
-
-1. **SKIP_PATTERNS** — directories and files always excluded (e.g., `node_modules/`, `vendor/`, `.git/`, `build/`, `dist/`, generated files, lock files).
-2. **`.gitignore`** — respected by default for both local folders and GitHub repositories (via the `pathspec` library).
-3. **`extra_ignore_patterns`** — user-configurable additional gitignore-style patterns passed to indexing tools.
+Include in your report:
+- Description of the vulnerability
+- Steps to reproduce
+- Potential impact
+- Suggested fix (optional)
 
 ---
 
-## Secret Exclusion
+## Data Handling Policy
 
-Files matching known secret patterns are excluded during indexing.
+ArgentMunch indexes source code. The following rules apply to all indexed data:
 
-**Excluded patterns include:**
-
-* Environment files: `.env`, `.env.*`, `*.env`
-* Certificates / keys: `*.pem`, `*.key`, `*.p12`, `*.pfx`, `*.keystore`, `*.jks`
-* SSH keys: `id_rsa*`, `id_ed25519*`, `id_dsa*`, `id_ecdsa*`
-* Credentials: `credentials.json`, `service-account*.json`, `*.credentials`
-* Auth files: `.htpasswd`, `.netrc`, `.npmrc`, `.pypirc`
-* Generic secret indicators: `*secret*`, `*.secrets`, `*.token`
-
-When a secret file is detected, a warning is included in the indexing response. Secret files are never stored in the index or cached content directory.
+1. **Local-only by default** — indexed symbol data stays on the machine running the server
+2. **No telemetry** — ArgentMunch does not phone home or transmit code to external services
+3. **Index storage** — stored in `~/.code-index/` (local disk only)
+4. **No cloud sync** — index data is never synced to external storage without explicit operator configuration
+5. **Sensitive file detection** — files matching secret patterns are excluded from indexing (see below)
 
 ---
 
-## File Size Limits
+## Repo Allowlist Policy
 
-* **Default maximum:** 500 KB per file (configurable via `max_file_size`).
-* Files exceeding the limit are skipped during discovery.
-* A configurable **file count limit** (default: 500 files) prevents runaway indexing of extremely large repositories.
+ArgentMunch only indexes repos that are explicitly configured by the operator.
 
----
-
-## Binary File Detection
-
-Binary files are excluded using a two-stage check:
-
-1. **Extension-based detection** — common binary extensions (`.exe`, `.dll`, `.so`, `.png`, `.jpg`, `.zip`, `.wasm`, `.pyc`, `.class`, `.pdf`, `.db`, `.sqlite`, etc.).
-2. **Content-based detection** — files containing null bytes within the first 8 KB are treated as binary and skipped, even if the extension suggests source code.
+- No auto-discovery of repos on disk
+- Repos must be explicitly added to the index configuration
+- Wildcards require explicit opt-in
+- MAO agents may only query repos in the allowlist — no arbitrary repo access
 
 ---
 
-## Encoding Safety
+## Secret Exclusion Policy
 
-* All file reads use `errors="replace"` to substitute invalid UTF-8 bytes with the Unicode replacement character (U+FFFD) instead of raising decode errors.
-* Symbol content retrieval also uses `errors="replace"` to ensure safe decoding.
-* Cached raw files are stored using UTF-8 encoding.
+ArgentMunch **never** indexes files matching these patterns:
+
+```
+.env
+.env.*
+*.key
+*.pem
+*.p12
+*.pfx
+*.cert
+*.crt
+secrets/
+.secrets/
+credentials/
+config/secrets*
+**/*secret*
+**/*password*
+**/*token*
+**/*api_key*
+```
+
+These exclusions are enforced at the file discovery layer — matching files are skipped before any content is read.
+
+**Additional hardening:**
+- Symbol extraction never logs file content — only symbol names, types, and locations
+- Query results never return raw file content — only structured symbol metadata
 
 ---
 
-## Storage Safety
+## Known Inherited Risks (from jCodeMunch upstream)
 
-* Index storage defaults to `~/.code-index/`.
-* The storage path can be overridden using the `CODE_INDEX_PATH` environment variable.
-* Repository identifiers are derived from `{owner}-{name}`, preventing path injection in storage locations.
-* Index files are stored as JSON and validated during load to ensure schema integrity.
+ArgentMunch inherits the following security controls from jCodeMunch:
+
+- **Path traversal prevention** — all paths validated to be descendants of repo root
+- **Symlink escape protection** — symlinks outside repo root are rejected
+- **GitHub API token scoping** — only `repo:read` scope required
+
+See [upstream SECURITY.md](https://github.com/jgravelle/jcodemunch-mcp/blob/main/SECURITY.md) for full upstream controls.
 
 ---
 
-## Summary of Controls
-
-| Control                   | Location                       | Default                     |
-| ------------------------- | ------------------------------ | --------------------------- |
-| Path traversal validation | `security.validate_path()`     | Always enabled              |
-| Symlink escape protection | `security.is_symlink_escape()` | Symlinks skipped by default |
-| Secret file exclusion     | `security.is_secret_file()`    | Always enabled              |
-| Binary file detection     | `security.is_binary_file()`    | Always enabled              |
-| File size limit           | File discovery pipeline        | 500 KB                      |
-| File count limit          | File discovery pipeline        | 500 files                   |
-| `.gitignore` respect      | Indexing pipeline              | Enabled                     |
-| UTF-8 safe decode         | All file reads                 | `errors="replace"`          |
+*Last updated: 2026-03-04 | ArgentOS / ArgentAIOS team*

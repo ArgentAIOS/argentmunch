@@ -1,14 +1,18 @@
 # ArgentMunch
 
-> Token-efficient codebase intelligence for ArgentOS and MAO agents.
+> ⚠️ **NOT PRODUCTION-READY** — Pre-release, under active development. Do not use in production environments.
 
-**ArgentMunch** is a fork of [jCodeMunch MCP](https://github.com/jgravelle/jcodemunch-mcp), repurposed and extended for the ArgentOS ecosystem, Claude Code workflows, and the MAO multi-agent cluster.
+Token-efficient codebase intelligence for ArgentOS and MAO agents.
+
+**ArgentMunch** is a fork of [jCodeMunch MCP](https://github.com/jgravelle/jcodemunch-mcp), repurposed and extended for the ArgentOS ecosystem, Claude Code workflows, and the MAO multi-agent cluster (17+ agents).
 
 ---
 
-## The Problem
+## Project Purpose
 
-Most AI agents explore codebases the expensive way — reading entire files, skimming thousands of irrelevant lines, repeating for every task. At scale with 17+ agents, token costs multiply fast.
+Most AI agents explore codebases the expensive way — reading entire files, skimming thousands of irrelevant lines, repeating for every agent and every task. At scale, token costs compound fast.
+
+ArgentMunch uses **tree-sitter AST parsing** to pre-index codebases so agents retrieve exact symbols (functions, classes, methods) instead of reading whole files.
 
 | Task | Traditional | ArgentMunch |
 |---|---|---|
@@ -18,15 +22,101 @@ Most AI agents explore codebases the expensive way — reading entire files, ski
 
 **80–99% token reduction for code exploration tasks.**
 
+With 17+ MAO agents all hitting a shared ArgentMunch endpoint, the savings multiply across every agent, every session.
+
 ---
 
-## What ArgentMunch Adds
+## Local Run Instructions
 
-- **ArgentOS-native integration** — pre-wired as an MCP server in argent.json
-- **Multi-repo indexing** — index all active repos, query across all of them in one call
-- **MAO shared endpoint** — one centralized server all 17+ MAO agents hit (Dell R750)
-- **Diff awareness** — symbol change tracking, stale cache detection, webhook-triggered re-index
-- **jContextMunch layer** — unified code + docs retrieval in one endpoint
+### Requirements
+
+- Python 3.10+
+- pip / uv
+
+### Install
+
+```bash
+cd /Users/sem/code/argentmunch
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
+
+### Run the MCP server
+
+```bash
+argentmunch-mcp
+```
+
+Server starts on `http://localhost:8765` by default.
+
+---
+
+## Index + Query Quickstart
+
+### Index a local repo
+
+```bash
+argentmunch-mcp index --path /Users/sem/code/argentos
+```
+
+### Index a GitHub repo
+
+```bash
+argentmunch-mcp index --repo ArgentAIOS/argentos
+```
+
+### Query for a symbol
+
+```bash
+argentmunch-mcp query --symbol "memory_store" --repo argentos
+```
+
+### Multi-repo index (Phase 2)
+
+```bash
+argentmunch-mcp index --config ~/.argentmunch/repos.yaml
+```
+
+---
+
+## MCP Config (Claude Code / Claude Desktop)
+
+Add to your MCP server config:
+
+```json
+{
+  "mcpServers": {
+    "argentmunch": {
+      "command": "argentmunch-mcp",
+      "env": {
+        "GITHUB_TOKEN": "ghp_...",
+        "ANTHROPIC_API_KEY": "sk-ant-..."
+      }
+    }
+  }
+}
+```
+
+---
+
+## Health Endpoint
+
+Once running, check server health at:
+
+```
+GET http://localhost:8765/health
+```
+
+Response:
+```json
+{
+  "status": "ok",
+  "indexed_repos": ["argentos", "sub-agents"],
+  "index_freshness": "2026-03-04T22:00:00Z",
+  "version": "0.1.0-argentmunch"
+}
+```
 
 ---
 
@@ -39,6 +129,7 @@ Most AI agents explore codebases the expensive way — reading entire files, ski
                     │                              │
                     │  ┌──────────────────────┐   │
                     │  │   Symbol Index Store  │   │
+                    │  │   ~/.code-index/      │   │
                     │  │   (tree-sitter AST)   │   │
                     │  └──────────────────────┘   │
                     └──────────┬──────────────────┘
@@ -54,27 +145,20 @@ Most AI agents explore codebases the expensive way — reading entire files, ski
 
 ---
 
-## Implementation Phases
+## Docs
 
-- **Phase 1** — Fork & baseline: local MVP, index ArgentOS repo, validate token savings
-- **Phase 2** — Multi-repo & shared endpoint: deploy on Dell R750, wire into MAO
-- **Phase 3** — Diff awareness & webhooks: auto re-index on git push, stale cache alerts
-- **Phase 4** — jContextMunch layer: unified code + docs retrieval, Claude Code integration
+- [Full Project Epic](./ARGENTMUNCH_EPIC.md)
+- [Roadmap](./docs/ROADMAP.md)
+- [Security Policy](./SECURITY.md)
+- [License Check](./LICENSE_CHECK.md)
+- [Upstream Architecture](./ARCHITECTURE.md)
 
 ---
 
 ## Upstream
 
 - **jCodeMunch MCP:** https://github.com/jgravelle/jcodemunch-mcp
-- **License:** See upstream — dual-use, verify before commercial use
-
----
-
-## Status
-
-🚧 **Phase 1 — Active Development**
-
-See [ARGENTMUNCH_EPIC.md](./ARGENTMUNCH_EPIC.md) for full project spec and architecture.
+- **License:** See [LICENSE_CHECK.md](./LICENSE_CHECK.md) — ⚠️ pending legal review
 
 ---
 
