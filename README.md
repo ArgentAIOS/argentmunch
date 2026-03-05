@@ -73,6 +73,12 @@ Filter by kind:
 argentmunch query local/argentmunch "Calculator" --kind class
 ```
 
+Search across all indexed repos:
+
+```bash
+argentmunch query --all "search_symbols" --max-results 20
+```
+
 ### List Indexed Repos
 
 ```bash
@@ -90,16 +96,33 @@ argentmunch health
 # { "ok": true, "version": "0.1.0-mvp", "indexed_repos_count": 1, ... }
 ```
 
-### Multi-Repo Index Run
+### Multi-Repo Index Run (Allowlist Config)
 
 ```bash
-# Optional: enforce explicit GitHub repo allowlist
-export ARGENTMUNCH_REPO_ALLOWLIST="argentaios/argentos,argentaios/*"
+# Configure explicit allowlist (deny-by-default once file exists)
+mkdir -p ~/.argentmunch
+cat > ~/.argentmunch/repos.yaml <<'YAML'
+repos:
+  - repo: argentaios/argentos
+    name: argentos-core
+  - argentaios/argentmunch
+YAML
 
-argentmunch index-repos \
-  argentaios/argentos \
-  https://github.com/argentaios/argentmunch \
-  --incremental
+# Index all allowlisted repos from config
+argentmunch index --config ~/.argentmunch/repos.yaml --incremental
+
+# Manage allowlist from CLI
+argentmunch repos list
+argentmunch repos add argentaios/another-repo
+argentmunch repos remove argentaios/another-repo
+```
+
+When `repos.yaml` exists, repos not listed are rejected for index/reindex operations.
+
+Manual targeted reindex:
+
+```bash
+argentmunch reindex argentaios/argentos --config ~/.argentmunch/repos.yaml
 ```
 
 ### Health Check (HTTP)
@@ -148,7 +171,7 @@ curl http://127.0.0.1:9120/status
 export ARGENTMUNCH_HEALTH_TOKEN="replace-me"
 export ARGENTMUNCH_WEBHOOK_SECRET="replace-me"
 
-# Repo allowlist (empty => allow all, for backward compatibility)
+# Optional env fallback allowlist (used only when repos.yaml is absent)
 export ARGENTMUNCH_REPO_ALLOWLIST="argentaios/argentos,argentaios/*"
 
 # Stale threshold for /status and `argentmunch status`
@@ -158,17 +181,34 @@ export ARGENTMUNCH_STALE_THRESHOLD_MINUTES=60
 By default, `argentmunch serve` now binds to `127.0.0.1` (local-safe default).  
 When `ARGENTMUNCH_HEALTH_TOKEN` is set, `/health` and `/status` require `Authorization: Bearer <token>`.
 
-Webhook trigger simulation:
+Webhook trigger simulation (`POST /webhook`, GitHub push event):
 
 ```bash
 payload='{"repository":{"full_name":"argentaios/argentos"}}'
 sig=$(printf '%s' "$payload" | openssl dgst -sha256 -hmac "$ARGENTMUNCH_WEBHOOK_SECRET" | sed 's/^.* //')
 
-curl -X POST http://127.0.0.1:9120/webhook/github \
+curl -X POST http://127.0.0.1:9120/webhook \
   -H "Content-Type: application/json" \
   -H "X-GitHub-Event: push" \
   -H "X-Hub-Signature-256: sha256=$sig" \
   -d "$payload"
+```
+
+Example response:
+
+```json
+{
+  "ok": true,
+  "event": "push",
+  "repo": "argentaios/argentos",
+  "accepted": true,
+  "reason": "scheduled",
+  "retry_after_seconds": null,
+  "status": {
+    "repo": "argentaios/argentos",
+    "in_progress": true
+  }
+}
 ```
 
 ---

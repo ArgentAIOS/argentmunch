@@ -207,6 +207,7 @@ async def index_repo(
     storage_path: Optional[str] = None,
     incremental: bool = False,
     allowlist: Optional[list[str]] = None,
+    deny_by_default: bool = False,
 ) -> dict:
     """Index a GitHub repository.
     
@@ -226,7 +227,7 @@ async def index_repo(
         return {"success": False, "error": str(e)}
 
     full_repo = f"{owner}/{repo}"
-    if not is_repo_allowed(full_repo, allowlist):
+    if not is_repo_allowed(full_repo, allowlist, deny_by_default=deny_by_default):
         return {
             "success": False,
             "error": f"Repository not authorized for indexing: {full_repo}",
