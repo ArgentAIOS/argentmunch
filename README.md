@@ -128,14 +128,28 @@ argentmunch reindex argentaios/argentos --config ~/.argentmunch/repos.yaml
 ### Health Check (HTTP)
 
 ```bash
-# Start the health server
+# Start the health server (token required by default)
+export ARGENTMUNCH_HEALTH_TOKEN="replace-me"
 argentmunch serve --port 9120
 
-# In another terminal:
-curl http://localhost:9120/health
+# Unauthorized (missing token)
+curl -i http://127.0.0.1:9120/health
+
+# Authorized
+curl -s http://127.0.0.1:9120/health \
+  -H "Authorization: Bearer $ARGENTMUNCH_HEALTH_TOKEN"
 ```
 
-Response:
+Unauthorized response:
+```json
+{
+  "error": "Unauthorized",
+  "reason": "missing_token",
+  "hint": "Provide Authorization: Bearer <token>."
+}
+```
+
+Authorized response:
 ```json
 {
   "ok": true,
@@ -161,13 +175,31 @@ Returns 200 when healthy, 503 when index metadata is corrupt.
 argentmunch status --stale-threshold-minutes 30
 
 # or over HTTP:
-curl http://127.0.0.1:9120/status
+curl -s http://127.0.0.1:9120/status \
+  -H "Authorization: Bearer $ARGENTMUNCH_HEALTH_TOKEN"
+```
+
+Example `/status` response:
+```json
+{
+  "ok": true,
+  "version": "0.1.0-mvp",
+  "indexed_repos_count": 1,
+  "total_symbols": 358,
+  "last_indexed_at": "2026-03-04T23:10:05.822416",
+  "stale": false,
+  "stale_threshold_minutes": 30,
+  "threshold_config_used": {
+    "stale_threshold_minutes": 30,
+    "source_env": "ARGENTMUNCH_STALE_THRESHOLD_MINUTES"
+  }
+}
 ```
 
 ### Secure Health + Webhook Configuration
 
 ```bash
-# Optional but recommended in shared environments:
+# Recommended in shared environments:
 export ARGENTMUNCH_HEALTH_TOKEN="replace-me"
 export ARGENTMUNCH_WEBHOOK_SECRET="replace-me"
 
@@ -179,7 +211,9 @@ export ARGENTMUNCH_STALE_THRESHOLD_MINUTES=60
 ```
 
 By default, `argentmunch serve` now binds to `127.0.0.1` (local-safe default).  
-When `ARGENTMUNCH_HEALTH_TOKEN` is set, `/health` and `/status` require `Authorization: Bearer <token>`.
+By default, `/health` and `/status` require `Authorization: Bearer <token>`.
+For explicit localhost-only dev mode without a token, set `ARGENTMUNCH_HEALTH_LOCAL_DEV=true`
+or start with `argentmunch serve --health-local-dev`.
 
 Webhook trigger simulation (`POST /webhook`, GitHub push event):
 

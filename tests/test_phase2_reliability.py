@@ -78,6 +78,28 @@ def test_allowlist_strict_accept_and_reject():
     assert is_repo_allowed("other/repo", allowlist, deny_by_default=True) is False
 
 
+def test_health_endpoint_requires_token_when_configured():
+    server = _start_server(health_token="secret-token")
+    port = server.server_address[1]
+
+    try:
+        conn = HTTPConnection("127.0.0.1", port, timeout=5)
+        conn.request("GET", "/health")
+        response = conn.getresponse()
+        body = json.loads(response.read())
+        assert response.status == 401
+        assert body["error"] == "Unauthorized"
+
+        conn = HTTPConnection("127.0.0.1", port, timeout=5)
+        conn.request("GET", "/status", headers={"Authorization": "Bearer secret-token"})
+        response = conn.getresponse()
+        body = json.loads(response.read())
+        assert response.status == 200
+        assert "stale_threshold_minutes" in body
+    finally:
+        server.shutdown()
+
+
 def test_webhook_rejects_invalid_signature_with_403():
     server = _start_server(webhook_secret="whsec-test", manager=_FakeManager())
     port = server.server_address[1]

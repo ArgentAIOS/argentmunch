@@ -154,7 +154,11 @@ class HealthHandler(BaseHTTPRequestHandler):
             _json_response(self, 400, {"error": "Missing repository.full_name in webhook payload"})
             return
 
-        if not is_repo_allowed(repo_name, _repo_allowlist, deny_by_default=_deny_by_default_allowlist):
+        if not is_repo_allowed(
+            repo_name,
+            _repo_allowlist,
+            deny_by_default=_deny_by_default_allowlist,
+        ):
             _json_response(
                 self,
                 403,

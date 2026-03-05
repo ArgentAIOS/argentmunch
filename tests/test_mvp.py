@@ -266,6 +266,8 @@ class TestHealthEndpoint:
         from jcodemunch_mcp.health_server import run_health_server
         import jcodemunch_mcp.health_server as hs
         hs._storage_path = tmp_storage
+        hs._health_token = None
+        hs._health_local_dev_mode = True
 
         from http.server import HTTPServer
         server = HTTPServer(("127.0.0.1", 0), hs.HealthHandler)

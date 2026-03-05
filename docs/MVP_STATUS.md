@@ -16,7 +16,8 @@
 
 ### HTTP Health Endpoint
 - **`argentmunch serve [--port N]`** — Start HTTP server (default port 9120)
-- **`GET /health`** — Returns JSON: `ok`, `version`, `indexed_repos_count`, `total_symbols`, `last_indexed_at`, per-repo breakdown
+- **`GET /health`** — Requires bearer token by default (or explicit local-dev override)
+- **`GET /status`** — Freshness/status payload with stale-threshold metadata
 - Returns 200 when healthy, 503 when index metadata is corrupt
 - 404 for all other paths
 
@@ -35,7 +36,7 @@
 1. **No GitHub repo indexing via CLI** — `index_repo` (remote GitHub) is only available via MCP server, not CLI. MVP focuses on local folder indexing.
 2. **No AI summaries in benchmark** — Benchmark runs with `--no-ai` to avoid API key dependency. AI summary quality untested in MVP.
 3. **Single-repo queries only** — Each query targets one repo. Cross-repo search not yet implemented.
-4. **No authentication on health endpoint** — HTTP server is unauthenticated. Fine for local use, needs auth for production.
+4. **No rate limiting/CORS/TLS at endpoint layer** — Token auth exists, but network hardening still relies on reverse proxy + infrastructure controls.
 5. **No webhook/watch mode** — Manual re-index required after code changes. Planned for Phase 2.
 6. **Python 3.14 only tested** — Dependencies install cleanly on 3.14. Compatibility with 3.10-3.13 not verified.
 
