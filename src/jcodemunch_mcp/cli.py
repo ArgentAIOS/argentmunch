@@ -12,7 +12,13 @@ from typing import Optional
 
 from .reindex_manager import ReindexManager, attach_reindex_status
 from .repos_config import add_repo, load_repos_config, remove_repo
-from .runtime_config import get_health_token, get_repo_allowlist, get_webhook_secret, is_repo_allowed
+from .runtime_config import (
+    get_health_local_dev_mode,
+    get_health_token,
+    get_repo_allowlist,
+    get_webhook_secret,
+    is_repo_allowed,
+)
 from .storage import IndexStore
 from .tools.index_folder import index_folder
 from .tools.index_repo import index_repo
@@ -512,6 +518,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
     host = args.host
     storage = args.storage or None
     health_token = args.health_token or get_health_token()
+    health_local_dev_mode = args.health_local_dev or get_health_local_dev_mode()
     webhook_secret = args.webhook_secret or get_webhook_secret()
     allowlist, deny_by_default = _effective_repo_allowlist(args.repos_config)
     stale_threshold_minutes = args.stale_threshold_minutes
@@ -521,6 +528,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
         port=port,
         storage_path=storage,
         health_token=health_token,
+        health_local_dev_mode=health_local_dev_mode,
         webhook_secret=webhook_secret,
         repo_allowlist=allowlist,
         stale_threshold_minutes=stale_threshold_minutes,
@@ -611,6 +619,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_serve.add_argument("--port", "-p", type=int, default=9120, help="Port (default: 9120)")
     p_serve.add_argument("--repos-config", default=None, help="repos.yaml path (default ~/.argentmunch/repos.yaml)")
     p_serve.add_argument("--health-token", default=None, help="Health/status auth token (default: ARGENTMUNCH_HEALTH_TOKEN)")
+    p_serve.add_argument("--health-local-dev", action="store_true", help="Allow localhost health checks without token")
     p_serve.add_argument("--webhook-secret", default=None, help="GitHub webhook secret (default: ARGENTMUNCH_WEBHOOK_SECRET)")
     p_serve.add_argument(
         "--stale-threshold-minutes",
