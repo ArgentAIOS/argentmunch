@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 import httpx
 
 from ..parser import parse_file, LANGUAGE_EXTENSIONS
+from ..runtime_config import is_repo_allowed
 from ..security import is_secret_file, is_binary_extension
 from ..storage import IndexStore
 from ..summarizer import summarize_symbols
@@ -205,6 +206,7 @@ async def index_repo(
     github_token: Optional[str] = None,
     storage_path: Optional[str] = None,
     incremental: bool = False,
+    allowlist: Optional[list[str]] = None,
 ) -> dict:
     """Index a GitHub repository.
     
@@ -222,6 +224,15 @@ async def index_repo(
         owner, repo = parse_github_url(url)
     except ValueError as e:
         return {"success": False, "error": str(e)}
+
+    full_repo = f"{owner}/{repo}"
+    if not is_repo_allowed(full_repo, allowlist):
+        return {
+            "success": False,
+            "error": f"Repository not authorized for indexing: {full_repo}",
+            "repo": full_repo,
+            "reason": "repo_not_allowed",
+        }
     
     # Get GitHub token from env if not provided
     if not github_token:
@@ -279,7 +290,7 @@ async def index_repo(
                 return {
                     "success": True,
                     "message": "No changes detected",
-                    "repo": f"{owner}/{repo}",
+                    "repo": full_repo,
                     "changed": 0, "new": 0, "deleted": 0,
                 }
 
@@ -320,7 +331,7 @@ async def index_repo(
 
             result = {
                 "success": True,
-                "repo": f"{owner}/{repo}",
+                "repo": full_repo,
                 "incremental": True,
                 "changed": len(changed), "new": len(new), "deleted": len(deleted),
                 "symbol_count": len(updated.symbols) if updated else 0,
@@ -370,7 +381,7 @@ async def index_repo(
 
         result = {
             "success": True,
-            "repo": f"{owner}/{repo}",
+            "repo": full_repo,
             "indexed_at": store.load_index(owner, repo).indexed_at,
             "file_count": len(parsed_files),
             "symbol_count": len(all_symbols),

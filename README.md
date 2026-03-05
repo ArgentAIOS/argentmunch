@@ -90,6 +90,18 @@ argentmunch health
 # { "ok": true, "version": "0.1.0-mvp", "indexed_repos_count": 1, ... }
 ```
 
+### Multi-Repo Index Run
+
+```bash
+# Optional: enforce explicit GitHub repo allowlist
+export ARGENTMUNCH_REPO_ALLOWLIST="argentaios/argentos,argentaios/*"
+
+argentmunch index-repos \
+  argentaios/argentos \
+  https://github.com/argentaios/argentmunch \
+  --incremental
+```
+
 ### Health Check (HTTP)
 
 ```bash
@@ -119,6 +131,45 @@ Response:
 ```
 
 Returns 200 when healthy, 503 when index metadata is corrupt.
+
+### Index Freshness Status
+
+```bash
+argentmunch status --stale-threshold-minutes 30
+
+# or over HTTP:
+curl http://127.0.0.1:9120/status
+```
+
+### Secure Health + Webhook Configuration
+
+```bash
+# Optional but recommended in shared environments:
+export ARGENTMUNCH_HEALTH_TOKEN="replace-me"
+export ARGENTMUNCH_WEBHOOK_SECRET="replace-me"
+
+# Repo allowlist (empty => allow all, for backward compatibility)
+export ARGENTMUNCH_REPO_ALLOWLIST="argentaios/argentos,argentaios/*"
+
+# Stale threshold for /status and `argentmunch status`
+export ARGENTMUNCH_STALE_THRESHOLD_MINUTES=60
+```
+
+By default, `argentmunch serve` now binds to `127.0.0.1` (local-safe default).  
+When `ARGENTMUNCH_HEALTH_TOKEN` is set, `/health` and `/status` require `Authorization: Bearer <token>`.
+
+Webhook trigger simulation:
+
+```bash
+payload='{"repository":{"full_name":"argentaios/argentos"}}'
+sig=$(printf '%s' "$payload" | openssl dgst -sha256 -hmac "$ARGENTMUNCH_WEBHOOK_SECRET" | sed 's/^.* //')
+
+curl -X POST http://127.0.0.1:9120/webhook/github \
+  -H "Content-Type: application/json" \
+  -H "X-GitHub-Event: push" \
+  -H "X-Hub-Signature-256: sha256=$sig" \
+  -d "$payload"
+```
 
 ---
 
