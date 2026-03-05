@@ -52,6 +52,7 @@ Thumbs.db
 .vscode/
 .idea/
 *.iml
+.claude/
 
 # Coverage
 .coverage

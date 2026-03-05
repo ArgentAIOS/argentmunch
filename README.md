@@ -26,61 +26,234 @@ With 17+ MAO agents all hitting a shared ArgentMunch endpoint, the savings multi
 
 ---
 
-## Local Run Instructions
+## Quick Start
 
 ### Requirements
 
 - Python 3.10+
-- pip / uv
+- pip
 
 ### Install
 
 ```bash
-cd /Users/sem/code/argentmunch
+cd argentmunch
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e .
+pip install -e ".[test]"
 ```
 
-### Run the MCP server
+### Index a Local Repo
+
+```bash
+argentmunch index /path/to/your/repo --no-ai
+
+# Example output:
+# ✓ Indexed 37 files, 358 symbols
+#   Repo: local/argentmunch
+#   Languages: python(37)
+```
+
+### Query Symbols
+
+```bash
+argentmunch query local/argentmunch "search_symbols"
+
+# Example output:
+# Search: 'search_symbols' in local/argentmunch
+# Found: 4 results (2.2ms)
+#
+#   1. [function] search_symbols
+#      File: src/jcodemunch_mcp/tools/search_symbols.py:11
+#      Score: 35
+```
+
+Filter by kind:
+
+```bash
+argentmunch query local/argentmunch "Calculator" --kind class
+```
+
+Search across all indexed repos:
+
+```bash
+argentmunch query --all "search_symbols" --max-results 20
+```
+
+### List Indexed Repos
+
+```bash
+argentmunch list
+
+# Indexed repositories: 1
+#   • local/argentmunch
+#     Files: 37, Symbols: 358
+```
+
+### Health Check (CLI)
+
+```bash
+argentmunch health
+# { "ok": true, "version": "0.1.0-mvp", "indexed_repos_count": 1, ... }
+```
+
+### Multi-Repo Index Run (Allowlist Config)
+
+```bash
+# Configure explicit allowlist (deny-by-default once file exists)
+mkdir -p ~/.argentmunch
+cat > ~/.argentmunch/repos.yaml <<'YAML'
+repos:
+  - repo: argentaios/argentos
+    name: argentos-core
+  - argentaios/argentmunch
+YAML
+
+# Index all allowlisted repos from config
+argentmunch index --config ~/.argentmunch/repos.yaml --incremental
+
+# Manage allowlist from CLI
+argentmunch repos list
+argentmunch repos add argentaios/another-repo
+argentmunch repos remove argentaios/another-repo
+```
+
+When `repos.yaml` exists, repos not listed are rejected for index/reindex operations.
+
+Manual targeted reindex:
+
+```bash
+argentmunch reindex argentaios/argentos --config ~/.argentmunch/repos.yaml
+```
+
+### Health Check (HTTP)
+
+```bash
+# Start the health server (token required by default)
+export ARGENTMUNCH_HEALTH_TOKEN="replace-me"
+argentmunch serve --port 9120
+
+# Unauthorized (missing token)
+curl -i http://127.0.0.1:9120/health
+
+# Authorized
+curl -s http://127.0.0.1:9120/health \
+  -H "Authorization: Bearer $ARGENTMUNCH_HEALTH_TOKEN"
+```
+
+Unauthorized response:
+```json
+{
+  "error": "Unauthorized",
+  "reason": "missing_token",
+  "hint": "Provide Authorization: Bearer <token>."
+}
+```
+
+Authorized response:
+```json
+{
+  "ok": true,
+  "version": "0.1.0-mvp",
+  "indexed_repos_count": 1,
+  "total_symbols": 358,
+  "last_indexed_at": "2026-03-04T23:10:05.822416",
+  "repos": [
+    {
+      "repo": "local/argentmunch",
+      "symbol_count": 358,
+      "file_count": 37
+    }
+  ]
+}
+```
+
+Returns 200 when healthy, 503 when index metadata is corrupt.
+
+### Index Freshness Status
+
+```bash
+argentmunch status --stale-threshold-minutes 30
+
+# or over HTTP:
+curl -s http://127.0.0.1:9120/status \
+  -H "Authorization: Bearer $ARGENTMUNCH_HEALTH_TOKEN"
+```
+
+Example `/status` response:
+```json
+{
+  "ok": true,
+  "version": "0.1.0-mvp",
+  "indexed_repos_count": 1,
+  "total_symbols": 358,
+  "last_indexed_at": "2026-03-04T23:10:05.822416",
+  "stale": false,
+  "stale_threshold_minutes": 30,
+  "threshold_config_used": {
+    "stale_threshold_minutes": 30,
+    "source_env": "ARGENTMUNCH_STALE_THRESHOLD_MINUTES"
+  }
+}
+```
+
+### Secure Health + Webhook Configuration
+
+```bash
+# Recommended in shared environments:
+export ARGENTMUNCH_HEALTH_TOKEN="replace-me"
+export ARGENTMUNCH_WEBHOOK_SECRET="replace-me"
+
+# Optional env fallback allowlist (used only when repos.yaml is absent)
+export ARGENTMUNCH_REPO_ALLOWLIST="argentaios/argentos,argentaios/*"
+
+# Stale threshold for /status and `argentmunch status`
+export ARGENTMUNCH_STALE_THRESHOLD_MINUTES=60
+```
+
+By default, `argentmunch serve` now binds to `127.0.0.1` (local-safe default).  
+By default, `/health` and `/status` require `Authorization: Bearer <token>`.
+For explicit localhost-only dev mode without a token, set `ARGENTMUNCH_HEALTH_LOCAL_DEV=true`
+or start with `argentmunch serve --health-local-dev`.
+
+Webhook trigger simulation (`POST /webhook`, GitHub push event):
+
+```bash
+payload='{"repository":{"full_name":"argentaios/argentos"}}'
+sig=$(printf '%s' "$payload" | openssl dgst -sha256 -hmac "$ARGENTMUNCH_WEBHOOK_SECRET" | sed 's/^.* //')
+
+curl -X POST http://127.0.0.1:9120/webhook \
+  -H "Content-Type: application/json" \
+  -H "X-GitHub-Event: push" \
+  -H "X-Hub-Signature-256: sha256=$sig" \
+  -d "$payload"
+```
+
+Example response:
+
+```json
+{
+  "ok": true,
+  "event": "push",
+  "repo": "argentaios/argentos",
+  "accepted": true,
+  "reason": "scheduled",
+  "retry_after_seconds": null,
+  "status": {
+    "repo": "argentaios/argentos",
+    "in_progress": true
+  }
+}
+```
+
+---
+
+## MCP Server Mode
+
+ArgentMunch also runs as an MCP server for Claude Code / Claude Desktop:
 
 ```bash
 argentmunch-mcp
 ```
-
-Server starts on `http://localhost:8765` by default.
-
----
-
-## Index + Query Quickstart
-
-### Index a local repo
-
-```bash
-argentmunch-mcp index --path /Users/sem/code/argentos
-```
-
-### Index a GitHub repo
-
-```bash
-argentmunch-mcp index --repo ArgentAIOS/argentos
-```
-
-### Query for a symbol
-
-```bash
-argentmunch-mcp query --symbol "memory_store" --repo argentos
-```
-
-### Multi-repo index (Phase 2)
-
-```bash
-argentmunch-mcp index --config ~/.argentmunch/repos.yaml
-```
-
----
-
-## MCP Config (Claude Code / Claude Desktop)
 
 Add to your MCP server config:
 
@@ -100,23 +273,34 @@ Add to your MCP server config:
 
 ---
 
-## Health Endpoint
+## Benchmark
 
-Once running, check server health at:
+Run the benchmark to compare brute-force file scans vs. symbol queries:
 
-```
-GET http://localhost:8765/health
+```bash
+python scripts/benchmark_mvp.py
 ```
 
-Response:
-```json
-{
-  "status": "ok",
-  "indexed_repos": ["argentos", "sub-agents"],
-  "index_freshness": "2026-03-04T22:00:00Z",
-  "version": "0.1.0-argentmunch"
-}
+Results (indexing ArgentMunch's own codebase):
+
+| Scenario | Brute-force | Symbol query | Savings |
+|----------|-------------|--------------|---------|
+| Broad search (`index`) | 59,738 tokens | 441 tokens | 99.3% (135x) |
+| Specific lookup (`save_index`) | 59,738 tokens | 286 tokens | 99.5% (209x) |
+| Cross-cutting (`parse file`) | 59,738 tokens | 531 tokens | 99.1% (113x) |
+
+Full report: [`docs/benchmarks/mvp-baseline.md`](./docs/benchmarks/mvp-baseline.md)
+
+---
+
+## Tests
+
+```bash
+source .venv/bin/activate
+python -m pytest tests/test_mvp.py -v
 ```
+
+17 tests covering: index success/failure/empty/incremental, query hit/miss/filter/methods, health empty/populated/HTTP/corrupt, CLI integration.
 
 ---
 
@@ -147,8 +331,10 @@ Response:
 
 ## Docs
 
+- [MVP Status](./docs/MVP_STATUS.md)
 - [Full Project Epic](./ARGENTMUNCH_EPIC.md)
 - [Roadmap](./docs/ROADMAP.md)
+- [Benchmarks](./docs/benchmarks/mvp-baseline.md)
 - [Security Policy](./SECURITY.md)
 - [License Check](./LICENSE_CHECK.md)
 - [Upstream Architecture](./ARCHITECTURE.md)
